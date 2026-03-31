@@ -2,35 +2,32 @@ import os
 import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
+from torchvision import datasets, transforms
 
-class CSVDataset(Dataset):
-    def __init__(self, csv_file, img_dir, filename_col="filename", label_col = "class", transform=None):
-        self.df = pd.read_csv(csv_file)
-        self.img_dir = img_dir
-        self.filename_col = filename_col
-        self.transform = transform
 
-        #clean and filter data
-        self._clean_filenames()
-        self._filter_existing_files()
-        self._setup_labels(label_col)
+def get_dataloaders(data_dir, batch_size=32, img_size=224):
+    train_transform = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
 
-    def _clean_filenames(self):
-        self.df[self.filename_col] = self.df[self.filename_col].astype(str).str.strip()
+    test_transform = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
 
-    def _filter_existing_files(self):
-        file_exists = self.df[self.filename_col].apply(lambda f: os.path.exists(os.path.join(self.img_dir, f)))
+    train_dataset = datasets.ImageFolder(root=os.path.join(data_dir, "train"), transform=train_transform)
+    test_dataset  = datasets.ImageFolder(root=os.path.join(data_dir, "test"),  transform=test_transform)
 
-        missing_count = (~file_exists).sum()
-        if missing_count > 0:
-            missing_samples = self.df.loc[~file_exists, self.filename_col].head(3).tolist() 
-            print(f"skipping{missing_count}missing files")
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader  = DataLoader(test_dataset,  batch_size=batch_size, shuffle=False)
 
-        self.df = self.df[file_exists].reset_index(drop=True)
+    print(f"Classes: {train_dataset.classes}")
+    print(f"Train samples: {len(train_dataset)}, Test samples: {len(test_dataset)}")
 
-    def _setup_labels(self,label_col):
-        if self.df[label_col].dtype == object:
-            classes = sorted(self.df[label_col.unique()])
-            self.class_to_idx = {cls: idx for idx, cls in enumerate(classes)}
-            self.idx_to_class = 
+    return train_loader, test_loader, train_dataset.classes
